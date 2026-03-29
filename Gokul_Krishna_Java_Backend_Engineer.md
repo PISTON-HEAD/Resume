@@ -47,7 +47,3 @@
 * Containerized the service using Docker for consistent deployment
 
 ---
-
-## 📄 Resume
-
-**File Name:** `Gokul_Krishna_Java_Backend_Engineer.pdf`
