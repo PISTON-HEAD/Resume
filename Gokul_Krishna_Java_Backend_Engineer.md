@@ -15,7 +15,7 @@
 
 * Java (Core, Collections, Streams, Concurrency)
 * Spring Boot, Spring Data JPA, Spring Security
-* REST APIs, Exception Handling, Validation
+* REST APIs, GraphQL, Exception Handling
 
 ### Microservices & Messaging
 
