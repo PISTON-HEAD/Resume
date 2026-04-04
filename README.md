@@ -1,6 +1,6 @@
 ## 📦 About This Repo
 
-This repo is basically my **project storage unit**.
+This repo is basically my **storage unit**.
 
 I use it to:
 - Keep track of what I’ve built  
