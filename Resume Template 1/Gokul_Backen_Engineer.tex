@@ -1,6 +1,6 @@
 %-------------------------
 % Resume in Latex
-% Author : Matty
+% Author : Gokul
 % Based on: https://github.com/jakegut/resume (which was itself based on https://github.com/sb2nov/resume)
 % License : MIT
 %------------------------
@@ -162,21 +162,20 @@ Backend Engineer with experience building scalable microservices using Spring Bo
 \resumeItemListEnd
 \resumeSubHeadingListEnd
 % -------------------- PROJECTS --------------------
-\section{Projects}
+\section{Project}
     \resumeSubHeadingListStart
 
-                 \resumeProjectHeading
-          {\textbf{ AI Requirements Generation Tool - \href{}{Philips Hackathon }} $|$ \footnotesize\emph{Amazon Bedrock,Python , Gradio.}}{2025-2026}
-          \resumeItemListStart
-        
-            \resumeItem{Built a RAG model to auto-generate new software requirements, features, user stories, and test cases from past and existing SRS documents.}
-            \resumeItem{Enabled requirement linking and sub-requirement extraction for improved traceability and structure.}
-              \resumeItem{Streamlined agile workflows by automating hierarchical requirement generation as features and stories and implemented UI using Gradio.}
+    \resumeProjectHeading
+      {\textbf{Conversational RAG Application} \footnotesize\emph}{2025-2026}
+       \resumeItemListStart
 
-          \resumeItemListEnd
+        \resumeItem{Built an end-to-end RAG pipeline parsing multi-format documents (PDF, DOCX, TXT) via Apache Tika, generating local 384-dim embeddings with ONNX embedding model, and retrieving semantically relevant chunks via cosine similarity to produce grounded, hallucination-resistant answers using Google Gemini 2.5 Flash.}
+        \resumeItem{Implemented server-side conversational memory with a thread-safe session store and sliding 5-turn history injected as structured User message turning it into the Gemini prompt, transforming a stateless Q\&A system into a context-aware multi-turn conversational agent.}
+        \resumeItem{Secured the API with stateless JWT authentication with role-based access control, and a global exception handler surfacing Gemini API errors as structured HTTP responses.}
 
-         
-    \resumeSubHeadingListEnd
+      \resumeItemListEnd
+
+\resumeSubHeadingListEnd
 
 %-----------PROGRAMMING SKILLS-----------
 \section{Skills and Expertise}
