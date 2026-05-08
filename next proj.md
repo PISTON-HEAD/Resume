@@ -51,6 +51,7 @@ You need to **upgrade the problem**, not just implement it.
 5. Appointment gets **confirmed**
 6. Notification sent
 7. Doctor consultation → prescription generated
+8. Very importantly we will be using GRPC and spring open feign for interservice communication. Please remmber this
 
 ---
 
