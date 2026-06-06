@@ -454,8 +454,30 @@ service DoctorGrpcService {
 6. **Introduce Kafka** — convert billing integration to async, implement Saga states and compensation
 
 
-Extend doctor.proto — add ReserveSlot, ConfirmSlot, ReleaseSlot RPCs
-Implement those RPCs in DoctorGrpcServiceImpl (doctor-service)
-Update appointment-service — call reserveSlot via gRPC right after creation, add PAYMENT_PENDING Saga state
-Then build billing-service — so appointment has something to call
-Then wire Kafka between them
+
+**What the appointment service is missing:**
+
+```
+Current flow:
+  POST /api/appointment → validate patient (gRPC) → validate doctor (gRPC) → save PENDING → done
+
+What it should do:
+  POST /api/appointment
+    → validate patient exists (gRPC)          ✅ already done
+    → validate doctor exists (gRPC)           ✅ already done
+    → reserve the slot (gRPC) ← MISSING
+    → save as PAYMENT_PENDING ← MISSING
+    → publish payment-initiated to Kafka ← MISSING (billing service not built yet)
+    → on payment success → confirm slot (gRPC) + mark CONFIRMED ← MISSING
+    → on payment fail → release slot (gRPC) + mark CANCELLED ← MISSING
+```
+
+**So the correct order is:**
+
+1. **Extend doctor.proto** — add `ReserveSlot`, `ConfirmSlot`, `ReleaseSlot` RPCs
+2. **Implement those RPCs** in `DoctorGrpcServiceImpl` (doctor-service)
+3. **Update appointment-service** — call `reserveSlot` via gRPC right after creation, add `PAYMENT_PENDING` Saga state
+4. **Then build billing-service** — so appointment has something to call
+5. **Then wire Kafka** between them
+
+Want to start with extending the proto files?
