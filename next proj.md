@@ -1,3 +1,76 @@
+Ran terminal command: git checkout -b "feature/adding_unit_testcases"
+
+Done. Now on branch `feature/adding_unit_testcases_doctor_&_patient_service`.
+
+Ready to start unit tests. Before we dive in, here's what you need to know conceptually:
+
+---
+
+## 🧪 Unit Test Structure You'll Build
+
+### Two types of tests per service:
+
+**1. Service Tests** — pure logic, no Spring context, no DB
+```
+@ExtendWith(MockitoExtension.class)   ← lightweight, just Mockito
+@Mock PatientRepository               ← fake repository
+@InjectMocks PatientService           ← real service with mocks injected
+```
+
+**2. Controller Tests** — HTTP layer only, no real service
+```
+@WebMvcTest(PatientController.class)  ← loads only web layer
+@MockBean PatientService              ← fake service (Spring context aware)
+MockMvc mockMvc                       ← simulate HTTP requests
+```
+
+---
+
+### Test cases to cover per service:
+
+**PatientService:**
+- `createPatient` → happy path returns response
+- `createPatient` → duplicate email throws `IllegalArgumentException`
+- `getPatientById` → found returns response
+- `getPatientById` → not found throws `PatientNotFoundException`
+- `existsById` → returns true/false
+- `updatePatient` → partial update works
+
+**DoctorService:**
+- `createDoctor` → happy path
+- `createDoctor` → duplicate email throws
+- `getDoctorById` → found / not found
+- `createDoctorSlot` → doctor exists, slot created
+- `reserveSlot` → happy path (AVAILABLE → RESERVED)
+- `reserveSlot` → already reserved throws
+- `releaseSlot` → happy path (RESERVED → AVAILABLE)
+- `confirmSlot` → happy path (RESERVED → CONFIRMED)
+- `confirmSlot` → not reserved throws
+
+---
+
+Which do you want to start with — **PatientServiceTest** or **DoctorServiceTest**?
+
+---
+
+## 🏗️ Test Folder Structure
+
+```
+patient-service/src/test/java/com/healthcare/patient_service/
+├── service/
+│   └── PatientServiceTest.java       ← pure Mockito, no Spring
+└── controller/
+    └── PatientControllerTest.java    ← MockMvc, web layer only
+
+doctor-service/src/test/java/com/healthcare/doctor_service/
+├── service/
+│   └── DoctorServiceTest.java        ← pure Mockito, no Spring
+└── controller/
+    └── DoctorControllerTest.java     ← MockMvc (after controller is built)
+```
+
+---
+
 # 🏥 3. Healthcare Appointment + Billing System
 
 ### 💡 Core Idea
@@ -20,6 +93,7 @@ Book appointment → doctor availability → payment → prescription
 
 * Book appointment → reserve slot → payment
 * Payment fails → release slot
+
 ---
 
 ### 2. Saga feels forced
@@ -30,7 +104,7 @@ Saga only makes sense when:
 * Failures require **compensation**
 
 Right now:
-👉 Only “payment fail → release slot” → too basic
+👉 Only "payment fail → release slot" → too basic
 
 ---
 
@@ -51,7 +125,7 @@ You need to **upgrade the problem**, not just implement it.
 5. Appointment gets **confirmed**
 6. Notification sent
 7. Doctor consultation → prescription generated
-8. Very importantly we will be using GRPC and spring open feign for interservice communication. Please remmber this
+8. Very importantly we will be using GRPC and spring open feign for interservice communication. Please remember this
 
 ---
 
@@ -137,7 +211,6 @@ Use it where async makes sense.
 ### OpenFeign
 
 * Synchronous call:
-
   * Appointment → Doctor (check + reserve slot)
 
 ---
@@ -173,7 +246,7 @@ If you can explain:
 * How you avoid **double booking (race condition)**
 * How compensation works step-by-step
 
-👉 You’re no longer a “2-year dev” — you look like a solid backend engineer.
+👉 You're no longer a "2-year dev" — you look like a solid backend engineer.
 
 ---
 
@@ -183,7 +256,7 @@ If you:
 
 * Just build endpoints
 * Add Kafka producer/consumer randomly
-* Don’t model failures
+* Don't model failures
 
 👉 This project is useless.
 
@@ -196,25 +269,17 @@ If you:
 👉 This becomes your **strongest resume project**
 
 ---
-Good — now we move from “idea” to **execution discipline**.
-Most people fail here because they try to build everything at once and end up with a broken mess.
-
-This plan forces you to **build incrementally, verify each layer, then move forward**.
-
----
 
 # 🧠 0. First Rule (Non-Negotiable)
 
 👉 You are NOT building microservices first
 👉 You are building **a distributed workflow step-by-step**
 
-If Kafka, Saga, retries are added before basic flow works → you’ll get lost.
+If Kafka, Saga, retries are added before basic flow works → you'll get lost.
 
 ---
 
-# 🏗️ 1. Project Structure (Do this properly)
-
-## Option A (Recommended for you)
+# 🏗️ 1. Project Structure (Recommended)
 
 👉 **Multi-module Maven project**
 
@@ -233,320 +298,80 @@ healthcare-system/
 
 ---
 
-## Why this matters
-
-* Shared DTOs → avoid duplication
-* Easier local development
-* Cleaner than random repos
+# 🧱 2. Phase-wise Implementation Plan
 
 ---
 
-# ⚙️ 2. Tech Setup (Day 1)
-
-### Dependencies per service:
-
-* Spring Boot
-* Spring Web
-* Spring Data JPA
-* PostgreSQL Driver
-* Lombok
-
-Later:
-
-* OpenFeign
-* Kafka
-* Resilience4j
-
----
-
-# 🧱 3. Phase-wise Implementation Plan
-
----
-
-# ✅ PHASE 1 — Build Core Services (NO Kafka, NO Saga)
+## ✅ PHASE 1 — Build Core Services (NO Kafka, NO Saga)
 
 👉 Goal: Make system work **synchronously first**
 
----
+### Step 1: Doctor Service — slots, reserve, release, prevent double booking
+### Step 2: Appointment Service — create, call Doctor Service (Feign), update status
+### Step 3: Billing Service (basic) — create payment API, return success/failure manually
+### Step 4: Integrate Payment (SYNC) — Appointment → Billing → response
 
-## Step 1: Doctor Service
-
-### Build:
-
-* Create slots
-* Reserve slot
-* Release slot
-
-### Test:
-
-* Prevent double booking
-* DB locking works
-
-👉 If this fails → your entire system fails later
+🚨 **Checkpoint 1**: Book appointment + handle payment fail + release slot must all work before moving on.
 
 ---
 
-## Step 2: Appointment Service
+## 🔁 PHASE 2 — Introduce Saga (Orchestration)
 
-### Build:
+### Step 5: Introduce Kafka + Zookeeper (Docker)
+### Step 6: Change flow — Appointment → Kafka → Billing → Kafka → Appointment
+### Step 7: Implement Saga States — PENDING → PAYMENT_PENDING → CONFIRMED / CANCELLED
+### Step 8: Payment Consumer — listen to payment-success / payment-failed
+### Step 9: Compensation Logic — payment fails → release slot → CANCELLED
 
-* Create appointment
-* Call Doctor Service (Feign)
-* Update status
-
-### Flow:
-
-```
-Create Appointment
-→ Call Doctor Service
-→ If success → CONFIRMED
-```
+🚨 **Checkpoint 2**: Async flow works + compensation works + no data inconsistency.
 
 ---
 
-## Step 3: Billing Service (basic)
+## ⚙️ PHASE 3 — Add Resilience
 
-* Create payment API
-* Return success/failure manually
-
----
-
-## Step 4: Integrate Payment (SYNC first)
-
-```
-Appointment → Billing → response
-```
-
-👉 At this point:
-✔ No Kafka
-✔ No Saga
-✔ Just working system
+### Step 10: Resilience4j — Retry (3 attempts) + Circuit breaker on Doctor Service calls
+### Step 11: Simulate failures — doctor service down, billing delay, Kafka delay
 
 ---
 
-# 🚨 Checkpoint 1
+## 🔁 PHASE 4 — Idempotency & Reliability
 
-If you can’t:
-
-* Book appointment
-* Handle payment fail
-* Release slot
-
-👉 STOP. Don’t move forward.
+### Step 12: Handle duplicate Kafka events — `processed_events` table, ignore duplicate eventId
+### Step 13: Safe consumers — if event already processed → skip
 
 ---
 
-# 🔁 PHASE 2 — Introduce Saga (Orchestration)
+## 🌐 PHASE 5 — API Gateway
 
-👉 Now convert sync → async
-
----
-
-## Step 5: Introduce Kafka
-
-### Setup:
-
-* Kafka + Zookeeper (Docker)
+### Step 14: Setup Gateway — route /appointments, /doctors, /payments
+### Step 15 (Optional): Add JWT authentication
 
 ---
 
-## Step 6: Change Flow
+## 🐳 PHASE 6 — Dockerize Everything
 
-### OLD:
-
-```
-Appointment → Billing (sync)
-```
-
-### NEW:
-
-```
-Appointment → Kafka → Billing
-Billing → Kafka → Appointment
-```
+### Step 16: Docker Compose — PostgreSQL, Kafka, Zookeeper, all services
+### Step 17: `docker-compose up` → full system runs
 
 ---
 
-## Step 7: Implement Saga States
+## 📊 PHASE 7 — Observability (Optional but HIGH IMPACT)
 
-Appointment status:
-
-* PENDING
-* PAYMENT_PENDING
-* CONFIRMED
-* CANCELLED
+### Step 18: Logs + correlationId (VERY important)
+### Step 19: Zipkin (distributed tracing)
 
 ---
 
-## Step 8: Payment Consumer (Appointment Service)
+## 🧪 PHASE 8 — Testing Strategy
 
-* Listen to:
-
-  * payment-success
-  * payment-failed
-
----
-
-## Step 9: Compensation Logic
-
-### If payment fails:
-
-```
-→ Call Doctor Service → release slot
-→ Update appointment CANCELLED
-```
+* Happy Flow — appointment success
+* Payment Failure — slot released
+* Duplicate Event — no double processing
+* Service Down — retry works
 
 ---
 
-# 🚨 Checkpoint 2
-
-You must demonstrate:
-
-* Async flow works
-* Compensation works
-* No data inconsistency
-
----
-
-# ⚙️ PHASE 3 — Add Resilience (THIS is where you level up)
-
----
-
-## Step 10: Add Resilience4j
-
-### Doctor Service Calls:
-
-* Retry (3 attempts)
-* Circuit breaker
-
----
-
-## Step 11: Handle Failures
-
-Simulate:
-
-* Doctor service down
-* Billing delay
-* Kafka delay
-
----
-
-# 🔁 PHASE 4 — Idempotency & Reliability
-
----
-
-## Step 12: Handle Duplicate Events
-
-👉 Kafka WILL send duplicates
-
-### Solution:
-
-* Add `processed_events` table
-* Ignore duplicate eventId
-
----
-
-## Step 13: Ensure Safe Consumers
-
-```
-if event already processed → skip
-```
-
----
-
-# 🌐 PHASE 5 — API Gateway
-
----
-
-## Step 14: Setup Gateway
-
-Routes:
-
-```
-/appointments → appointment-service
-/doctors → doctor-service
-/payments → billing-service
-```
-
----
-
-## Step 15 (Optional but strong):
-
-* Add JWT authentication
-
----
-
-# 🐳 PHASE 6 — Dockerize Everything
-
----
-
-## Step 16: Docker Compose
-
-Include:
-
-* PostgreSQL (multiple DBs or schemas)
-* Kafka
-* Zookeeper
-* All services
-
----
-
-## Step 17: Run full system
-
-👉 One command:
-
-```
-docker-compose up
-```
-
----
-
-# 📊 PHASE 7 — Observability (Optional but HIGH IMPACT)
-
----
-
-## Step 18:
-
-* Add logs for each step
-* Add correlationId (VERY important)
-
----
-
-## Step 19:
-
-* Add Zipkin (distributed tracing)
-
----
-
-# 🧪 PHASE 8 — Testing Strategy
-
----
-
-## Must Test:
-
-### 1. Happy Flow
-
-✔ Appointment success
-
-### 2. Payment Failure
-
-✔ Slot released
-
-### 3. Duplicate Event
-
-✔ No double processing
-
-### 4. Service Down
-
-✔ Retry works
-
----
-
-# 🧠 FINAL ARCHITECTURE FLOW
-
----
-
-## 🔥 Booking Flow
+# 🔥 Final Architecture Flow
 
 ```
 Client → Gateway
@@ -557,25 +382,12 @@ Client → Gateway
 → Kafka (payment result)
 → Appointment Service
 → Doctor Service (confirm/release)
+→ Notification Service (Kafka)
 ```
 
 ---
 
-# 🚨 Common Mistakes (Don’t do this)
-
----
-
-❌ Start Kafka before basic flow
-❌ No compensation logic
-❌ No idempotency
-❌ No failure testing
-❌ Random usage of Feign/WebClient
-
----
-
 # ⏱️ Realistic Timeline
-
----
 
 | Phase            | Time     |
 | ---------------- | -------- |
@@ -589,27 +401,61 @@ Client → Gateway
 
 ---
 
-# 🧠 What you’ll gain (real value)
+# ✅ Final Inter-Service Communication Decisions
 
-After this, you’ll understand:
+## Decision: Replace OpenFeign with gRPC for Doctor Service calls
 
-* Distributed transactions (not just theory)
-* Event-driven architecture
-* Failure handling (real-world skill)
-* System design at mid-level engineer level
+**Reason:** appointment-service already has gRPC infrastructure wired to doctor-service for `checkDoctorExists`. Adding slot operations to the same proto is cleaner than introducing a second protocol (OpenFeign) for the same service pair.
+
+**Rule:**
+- appointment ↔ patient → **gRPC** (checkPatientExists)
+- appointment ↔ doctor → **gRPC** (checkDoctorExists + reserveSlot + confirmSlot + releaseSlot)
+- appointment ↔ billing → **Kafka** (async — payment initiation and result)
+- billing / appointment → notification → **Kafka**
+
+## Updated Final Architecture
+
+```
+Client → API Gateway
+    │
+    └── Appointment Service (Saga Orchestrator)
+            │
+            ├── gRPC ──────────► Patient Service   (checkPatientExists)
+            ├── gRPC ──────────► Doctor Service    (checkDoctorExists,
+            │                                       reserveSlot,
+            │                                       confirmSlot,
+            │                                       releaseSlot)
+            └── Kafka ──────────► Billing Service  (payment-initiated topic)
+                                        │
+                                        └── Kafka ──► Appointment Service (payment-result topic)
+                                        └── Kafka ──► Notification Service (notify topic)
+```
+
+## Updated doctor.proto (both doctor-service and appointment-service)
+
+```protobuf
+service DoctorGrpcService {
+    rpc CheckDoctorExists (DoctorRequest)      returns (DoctorResponse);
+    rpc ReserveSlot       (ReserveSlotRequest) returns (SlotResponse);
+    rpc ConfirmSlot       (SlotRequest)        returns (SlotResponse);
+    rpc ReleaseSlot       (SlotRequest)        returns (SlotResponse);
+}
+```
 
 ---
 
-# 👉 Next Step (Critical)
+# 👉 Next Steps (in order)
 
-If you want to do this properly, next I’ll give you:
-
-👉 **Exact code-level structure**
-
-* Packages
-* Classes
-* DTOs
-* Kafka configs
-* Feign clients
+1. **Build billing-service** — Spring Boot project, MySQL, payment entity, basic REST API
+2. **Extend doctor.proto** — add ReserveSlot, ConfirmSlot, ReleaseSlot RPCs to both doctor-service and appointment-service proto files
+3. **Implement gRPC slot handlers** in doctor-service (`DoctorGrpcServiceImpl`)
+4. **Wire appointment-service** to call slot RPCs via gRPC instead of REST
+5. **Integrate appointment → billing** synchronously first (REST call), verify end-to-end flow
+6. **Introduce Kafka** — convert billing integration to async, implement Saga states and compensation
 
 
+Extend doctor.proto — add ReserveSlot, ConfirmSlot, ReleaseSlot RPCs
+Implement those RPCs in DoctorGrpcServiceImpl (doctor-service)
+Update appointment-service — call reserveSlot via gRPC right after creation, add PAYMENT_PENDING Saga state
+Then build billing-service — so appointment has something to call
+Then wire Kafka between them
