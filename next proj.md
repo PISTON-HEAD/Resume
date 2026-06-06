@@ -454,30 +454,118 @@ service DoctorGrpcService {
 6. **Introduce Kafka** — convert billing integration to async, implement Saga states and compensation
 
 
+Extend doctor.proto — add ReserveSlot, ConfirmSlot, ReleaseSlot RPCs
+Implement those RPCs in DoctorGrpcServiceImpl (doctor-service)
+Update appointment-service — call reserveSlot via gRPC right after creation, add PAYMENT_PENDING Saga state
+Then build billing-service — so appointment has something to call
+Then wire Kafka between them
 
-**What the appointment service is missing:**
+
+
+
+
+
+Good call. Here's exactly what you need to do, step by step.
+
+---
+
+## Step 1 — Extend both doctor.proto files
+
+Both files (doctor-service and appointment-service) need the same 3 new RPCs and 3 new messages added. Open each and add:
+
+```protobuf
+service DoctorGrpcService {
+    rpc CheckDoctorExists (DoctorRequest)      returns (DoctorResponse);
+    rpc ReserveSlot       (ReserveSlotRequest) returns (SlotResponse);
+    rpc ConfirmSlot       (SlotRequest)        returns (SlotResponse);
+    rpc ReleaseSlot       (SlotRequest)        returns (SlotResponse);
+}
+
+// --- existing messages stay as-is ---
+
+message ReserveSlotRequest {
+    string slot_id        = 1;
+    string appointment_id = 2;
+}
+
+message SlotRequest {
+    string slot_id = 1;
+}
+
+message SlotResponse {
+    string slot_id        = 1;
+    string doctor_id      = 2;
+    string status         = 3;
+    string appointment_id = 4;
+    string start_time     = 5;
+    string end_time       = 6;
+}
+```
+
+Do this in **both** proto files, then run `mvn clean compile` on doctor-service. You should see the new classes generated in `target/generated-sources/protobuf/`.
+
+---
+
+## Step 2 — Implement the RPCs in DoctorServiceGrpcImpl.java
+
+The class already extends `DoctorGrpcServiceImplBase`. After the proto is regenerated, 3 new overridable methods will appear. Override each one:
+
+**`reserveSlot`** — parse UUIDs from the request, call `doctorService.reserveSlot(slotId, appointmentId)`, convert the result to a `SlotResponse` proto and send it back. Catch `IllegalArgumentException` → return `FAILED_PRECONDITION`. Catch any other exception (slot not found) → return `NOT_FOUND`.
+
+**`confirmSlot`** — same pattern, call `doctorService.confirmSlot(slotId)`.
+
+**`releaseSlot`** — same pattern, call `doctorService.releaseSlot(slotId)`.
+
+**Helper method** you'll need:
+```java
+private SlotResponse toSlotResponse(DoctorSlotResponse slot) {
+    return SlotResponse.newBuilder()
+        .setSlotId(slot.slotId().toString())
+        .setDoctorId(slot.doctorId().toString())
+        .setStatus(slot.status().name())
+        .setAppointmentId(slot.reservedByAppointmentId() != null 
+            ? slot.reservedByAppointmentId().toString() : "")
+        .setStartTime(slot.startTime().toString())
+        .setEndTime(slot.endTime().toString())
+        .build();
+}
+```
+
+You'll also need to inject `DoctorService` alongside `DoctorRepository` in the constructor.
+
+---
+
+## Step 3 — Update `AppointmentService.createAppointment`
+
+Add imports for `ReserveSlotRequest` and `SlotRequest`. Then change `createAppointment` so after saving the appointment, it calls `reserveSlot` before returning:
 
 ```
-Current flow:
-  POST /api/appointment → validate patient (gRPC) → validate doctor (gRPC) → save PENDING → done
-
-What it should do:
-  POST /api/appointment
-    → validate patient exists (gRPC)          ✅ already done
-    → validate doctor exists (gRPC)           ✅ already done
-    → reserve the slot (gRPC) ← MISSING
-    → save as PAYMENT_PENDING ← MISSING
-    → publish payment-initiated to Kafka ← MISSING (billing service not built yet)
-    → on payment success → confirm slot (gRPC) + mark CONFIRMED ← MISSING
-    → on payment fail → release slot (gRPC) + mark CANCELLED ← MISSING
+1. Validate patient exists (gRPC)           ← already there
+2. Validate doctor exists (gRPC)            ← already there
+3. Save appointment as PENDING              ← already there
+4. Call doctorStub.reserveSlot(...)         ← ADD THIS
+   - if it throws → set status CANCELLED, save, re-throw
+   - if it succeeds → set status SLOT_RESERVED, save
+5. Return response
 ```
 
-**So the correct order is:**
+The key line to add after `repository.save(appointment)`:
+```java
+doctorStub.reserveSlot(ReserveSlotRequest.newBuilder()
+    .setSlotId(request.slotId().toString())
+    .setAppointmentId(saved.getId().toString())
+    .build());
+saved.setStatus(AppointmentStatus.SLOT_RESERVED);
+```
 
-1. **Extend doctor.proto** — add `ReserveSlot`, `ConfirmSlot`, `ReleaseSlot` RPCs
-2. **Implement those RPCs** in `DoctorGrpcServiceImpl` (doctor-service)
-3. **Update appointment-service** — call `reserveSlot` via gRPC right after creation, add `PAYMENT_PENDING` Saga state
-4. **Then build billing-service** — so appointment has something to call
-5. **Then wire Kafka** between them
+Wrap it in a try-catch — if the gRPC call fails, set status to `CANCELLED`, save, then throw `IllegalArgumentException`.
 
-Want to start with extending the proto files?
+---
+
+## Step 4 — Verify
+
+`mvn clean compile` on both services. Then rebuild the Docker images and test:
+- Create appointment with an AVAILABLE slot → should return `SLOT_RESERVED`  
+- Create appointment with an already-RESERVED slot → should return 400 "Slot reservation failed"
+
+Give it a go — come back if you hit any compile errors.
